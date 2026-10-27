@@ -1,0 +1,23 @@
+# Dependencies and build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# The OpenAI key lives here; .env.example is the template to copy
+.env
+.env.*
+!.env.example
+
+# The learner's own dictionary, saved sentences and lesson history (and their backups)
+data/
+
+# Local tool and editor settings
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
