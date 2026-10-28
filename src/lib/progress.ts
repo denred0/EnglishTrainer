@@ -52,11 +52,6 @@ const LEVEL_ORDER = Object.keys(LEVEL_CLASS) as Level[];
 /** To move up: this many correct answers in a row at the class's level or above. */
 export const PROMOTION_STREAK = 20;
 
-/** Whether an answer carries the run on: correct without a hint. "Почти", a mistake, "Не знаю" or a hint ends it. */
-export function keepsStreak(answer: LessonAnswer): boolean {
-  return answer.verdict === 'correct' && !answer.hinted;
-}
-
 /** The answers of a finished lesson, as the history keeps them. "Не знаю" counts as wrong. */
 export function lessonAnswers(sentences: Sentence[], attempts: Attempt[]): LessonAnswer[] {
   return attempts.map((attempt, i) => ({
@@ -85,9 +80,10 @@ export interface ClassState {
 
 /**
  * The class follows from the history: replaying the answers oldest first, each counted one either carries the run
- * of correct answers on or starts it again from zero; once the run reaches PROMOTION_STREAK, the learner moves up
- * and the next run starts. Easier sentences than the class's level are skipped: they neither count nor break it.
- * Lessons recorded before answers were kept one by one don't count.
+ * of correct answers on or starts it again from zero (a mistake or "Не знаю"); once the run reaches PROMOTION_STREAK,
+ * the learner moves up and the next run starts. Easier sentences than the class's level, "Почти" and correct answers
+ * given with a hint are skipped: they neither count nor break it. Lessons recorded before answers were kept one by
+ * one don't count.
  */
 export function classOf(records: LessonRecord[], extra: LessonAnswer[] = []): ClassState {
   const answers = [...records].reverse().flatMap((r) => r.answers ?? []).concat(extra);
@@ -96,7 +92,8 @@ export function classOf(records: LessonRecord[], extra: LessonAnswer[] = []): Cl
   for (const answer of answers) {
     if (number >= CLASS_NAMES.length) break;
     if (LEVEL_ORDER.indexOf(answer.level) < LEVEL_ORDER.indexOf(classLevel(number))) continue;
-    streak = keepsStreak(answer) ? streak + 1 : 0;
+    if (answer.verdict === 'almost' || (answer.verdict === 'correct' && answer.hinted)) continue;
+    streak = answer.verdict === 'correct' ? streak + 1 : 0;
     if (streak >= PROMOTION_STREAK) {
       number++;
       streak = 0;
@@ -124,12 +121,6 @@ export function levelOpening(level: Level) {
 /** Levels open in a class, easiest first; always at least A1. */
 export function openLevels(state: ClassState): Level[] {
   return LEVEL_ORDER.filter((level) => LEVEL_CLASS[level] <= state.number);
-}
-
-/** The next level to open, or null once all are open. */
-export function nextLevel(state: ClassState): { level: Level; classNumber: number } | null {
-  const level = LEVEL_ORDER.find((l) => LEVEL_CLASS[l] > state.number);
-  return level ? { level, classNumber: LEVEL_CLASS[level] } : null;
 }
 
 /** "во 2 классе", "в 4 классе". */

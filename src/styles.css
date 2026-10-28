@@ -22,6 +22,7 @@
 
   /* Teacher's pens */
   --pen-red: oklch(52% 0.19 25);
+  --pen-blue: oklch(50% 0.15 245);
   --pen-green: oklch(51% 0.13 150);
   --pen-amber: oklch(52% 0.11 70);
   --pen-amber-fill: oklch(76% 0.14 78);
@@ -66,6 +67,7 @@
   --on-ink: oklch(20% 0.03 264);
 
   --pen-red: oklch(70% 0.16 25);
+  --pen-blue: oklch(74% 0.12 245);
   --pen-green: oklch(75% 0.14 150);
   --pen-amber: oklch(80% 0.12 78);
   --pen-amber-fill: oklch(80% 0.12 78);
@@ -432,6 +434,12 @@ button.nav__link {
   text-wrap: balance;
 }
 
+/* The switches are one group: their 44px rows already leave room between them. */
+.setup__switches {
+  display: grid;
+  gap: 4px;
+}
+
 .choice {
   margin: 0;
   padding: 0;
@@ -544,10 +552,6 @@ button.nav__link {
 .lock {
   width: 14px;
   height: 14px;
-}
-
-.choice__note--lock {
-  margin-top: 4px;
 }
 
 .choice:disabled .cell {
@@ -1238,7 +1242,7 @@ legend.settings__heading {
   top: 6px;
   right: calc(100% + var(--gutter));
   width: var(--margin-w);
-  color: var(--pen-red);
+  color: var(--grade-pen);
   font-family: var(--font-hand);
   font-size: 38px;
   font-weight: 700;
@@ -1338,15 +1342,10 @@ legend.settings__heading {
   pointer-events: none;
 }
 
-/* On the left: only today's bar (the rightmost) carries a value label */
-.week__goal-label {
-  position: absolute;
-  left: 0;
-  bottom: 3px;
-  padding: 0 4px;
-  background: var(--paper);
-  color: var(--text-secondary);
-  font-size: 12px;
+/* The goal line's key in the legend: every bar carries a value label, so a label on the line would collide */
+.week__goal-swatch {
+  width: 14px;
+  border-top: 1.5px dashed var(--text-secondary);
 }
 
 .week__days {
@@ -1380,9 +1379,9 @@ legend.settings__heading {
   overflow: hidden;
 }
 
+/* Heights come from segmentHeights() in whole screen pixels */
 .week__segment {
-  flex-basis: 0;
-  min-height: 2px;
+  flex: none;
 }
 
 .week__segment[data-verdict='correct'],
@@ -1468,6 +1467,13 @@ legend.settings__heading {
   font-variant-numeric: tabular-nums;
 }
 
+.week__tip-share {
+  min-width: 4ch;
+  text-align: end;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
 .week__day:first-child .week__tip {
   left: 0;
   translate: 0 0;
@@ -1488,6 +1494,7 @@ legend.settings__heading {
   opacity: 1;
 }
 
+.week__shares,
 .week__labels {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1495,6 +1502,12 @@ legend.settings__heading {
   color: var(--text-secondary);
   font-size: 12px;
   text-align: center;
+}
+
+/* Each day's share of answers without mistakes, right under its bar, to follow from day to day */
+.week__shares {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 .week__labels [data-today] {
@@ -2384,6 +2397,20 @@ button.ru-word[aria-expanded='true'] {
   gap: 16px 40px;
 }
 
+/* Red pen for 2 and 3 only: a good grade written in red reads like a mistake */
+.grade,
+.history__grade {
+  --grade-pen: var(--pen-red);
+}
+
+:is(.grade, .history__grade)[data-grade='4'] {
+  --grade-pen: var(--pen-blue);
+}
+
+:is(.grade, .history__grade)[data-grade='5'] {
+  --grade-pen: var(--pen-green);
+}
+
 .grade {
   position: relative;
   width: 160px;
@@ -2392,7 +2419,7 @@ button.ru-word[aria-expanded='true'] {
 }
 
 .grade__digit {
-  color: var(--pen-red);
+  color: var(--grade-pen);
   font-family: var(--font-hand);
   font-size: 168px;
   font-weight: 700;
@@ -2405,7 +2432,7 @@ button.ru-word[aria-expanded='true'] {
   height: 22px;
   margin-top: 4px;
   fill: none;
-  stroke: var(--pen-red);
+  stroke: var(--grade-pen);
   stroke-width: 4;
   stroke-linecap: round;
 }

@@ -36,7 +36,7 @@ function untilNext(state: ClassState) {
 /** Which sentences count towards the next class, and what starts the run again. */
 function countedLevels(state: ClassState) {
   const levels = state.level === 'C2' ? 'C2' : `${state.level} и выше`;
-  return `Засчитываются предложения ${levels}. «Почти», ошибка или подсказка начинают счёт заново.`;
+  return `Засчитываются предложения ${levels}. «Почти» и ответ с подсказкой не идут в счёт, но и не сбивают его. Ошибка начинает счёт заново.`;
 }
 
 /** The start screen's strip: class and points, today's goal, the streak. */

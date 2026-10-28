@@ -1,5 +1,5 @@
 import type { FormEvent, ReactNode } from 'react';
-import { classOf, inClass, levelOpening, nextLevel, openLevels, PROMOTION_STREAK } from '../lib/progress';
+import { classOf, inClass, levelOpening, openLevels } from '../lib/progress';
 import { plural } from '../lib/text';
 import { useDictionary } from '../state/dictionary';
 import { useHistory } from '../state/history';
@@ -48,7 +48,6 @@ export function Setup({ settings, status, loading, error, onChange, onStart }: P
   const { records } = useHistory();
   const state = classOf(records ?? []);
   const open = openLevels(state);
-  const next = nextLevel(state);
   // Sentences below the class's level don't move the learner up; say so if the choice has only those.
   const belowClass = lessonLevels(settings.levels, open).every((l) => LEVELS.indexOf(l) < LEVELS.indexOf(state.level));
   // Levels ticked before they were locked (or before locks existed) don't count until they open.
@@ -118,7 +117,6 @@ export function Setup({ settings, status, loading, error, onChange, onStart }: P
                   value={level}
                   checked={!locked && (chosen.includes(level) || open.length === 1)}
                   disabled={locked || open.length === 1}
-                  aria-describedby={locked ? 'level-lock' : undefined}
                   onChange={() => toggleLevel(level)}
                 />
                 <span className="cell__face">
@@ -130,18 +128,11 @@ export function Setup({ settings, status, loading, error, onChange, onStart }: P
           })}
         </div>
         <p className="choice__note">{levelNote(chosen, open)}</p>
-        {belowClass ? (
+        {belowClass && (
           <p className="choice__note choice__note--error">
             Для перехода {state.next ? `в «${state.next}» ` : ''}засчитываются только предложения уровня {state.level} и
             выше, а в этом уроке их не будет.
           </p>
-        ) : (
-          next && (
-            <p className="choice__note choice__note--lock" id="level-lock">
-              {next.level} откроется {inClass(next.classNumber)}. Для перехода нужно {PROMOTION_STREAK} верных подряд в
-              предложениях уровня {state.level} и выше, сейчас {state.streak}.
-            </p>
-          )
         )}
       </fieldset>
 
@@ -154,33 +145,37 @@ export function Setup({ settings, status, loading, error, onChange, onStart }: P
         onChange={onChange}
       />
 
-      {saved.length > 0 && (
-        <fieldset className="choice" disabled={loading}>
-          <legend className="visually-hidden">Сохранённые предложения</legend>
-          <Switch checked={settings.useSaved} onChange={(useSaved) => onChange({ ...settings, useSaved })}>
-            Добавить сохранённые предложения
-          </Switch>
-          {settings.useSaved && (
-            <p className="choice__note">
-              {freshCount > 0
-                ? `Из сохранённых: ${fromSaved}, новых: ${freshCount}.`
-                : saved.length > settings.count
-                  ? `Урок соберётся только из сохранённых: ${settings.count} случайных из ${saved.length}.`
-                  : 'Урок соберётся только из сохранённых.'}
-            </p>
+      {(saved.length > 0 || entries.length > 0) && (
+        <div className="setup__switches">
+          {saved.length > 0 && (
+            <fieldset className="choice" disabled={loading}>
+              <legend className="visually-hidden">Сохранённые предложения</legend>
+              <Switch checked={settings.useSaved} onChange={(useSaved) => onChange({ ...settings, useSaved })}>
+                Добавить сохранённые предложения
+              </Switch>
+              {settings.useSaved && (
+                <p className="choice__note">
+                  {freshCount > 0
+                    ? `Из сохранённых: ${fromSaved}, новых: ${freshCount}.`
+                    : saved.length > settings.count
+                      ? `Урок соберётся только из сохранённых: ${settings.count} случайных из ${saved.length}.`
+                      : 'Урок соберётся только из сохранённых.'}
+                </p>
+              )}
+            </fieldset>
           )}
-        </fieldset>
-      )}
 
-      {entries.length > 0 && (
-        <WordChoice
-          settings={settings}
-          selected={selectedWords}
-          freshCount={freshCount}
-          mixedWithSaved={fromSaved > 0}
-          disabled={loading}
-          onChange={onChange}
-        />
+          {entries.length > 0 && (
+            <WordChoice
+              settings={settings}
+              selected={selectedWords}
+              freshCount={freshCount}
+              mixedWithSaved={fromSaved > 0}
+              disabled={loading}
+              onChange={onChange}
+            />
+          )}
+        </div>
       )}
 
       {status && !status.hasKey && (

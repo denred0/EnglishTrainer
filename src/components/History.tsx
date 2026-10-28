@@ -76,7 +76,7 @@ export function HistoryRow({ record }: { record: LessonRecord }) {
 
   return (
     <li className="history__item">
-      <span className="history__grade">
+      <span className="history__grade" data-grade={record.grade}>
         <span className="visually-hidden">Оценка </span>
         {record.grade}
       </span>

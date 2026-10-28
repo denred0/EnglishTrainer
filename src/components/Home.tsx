@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { answeredOn, verdictsOn } from '../lib/progress';
 import { loadSession, loadSettings } from '../lib/session';
 import { plural } from '../lib/text';
@@ -89,13 +89,69 @@ const SEGMENTS: { verdict: Verdict; label: string }[] = [
   { verdict: 'wrong', label: 'с ошибками' },
 ];
 
+/**
+ * Whole percents that add up to exactly 100 (57 + 20 + 24 would show 101): round down, then give the missing points
+ * to the largest remainders. Null when there are no answers.
+ */
+function wholeShares(verdicts: Record<Verdict, number>): Record<Verdict, number> | null {
+  const total = verdicts.correct + verdicts.almost + verdicts.wrong;
+  if (!total) return null;
+  const exact = SEGMENTS.map(({ verdict }) => ({ verdict, value: (verdicts[verdict] / total) * 100 }));
+  const shares = Object.fromEntries(exact.map(({ verdict, value }) => [verdict, Math.floor(value)])) as Record<Verdict, number>;
+  let missing = 100 - Object.values(shares).reduce((sum, v) => sum + v, 0);
+  for (const { verdict } of [...exact].sort((a, b) => (b.value % 1) - (a.value % 1))) {
+    if (missing-- <= 0) break;
+    shares[verdict]++;
+  }
+  return shares;
+}
+
+/** Screen pixels per CSS pixel; follows browser zoom and moving the window to another screen. */
+function useDevicePixelRatio() {
+  const [ratio, setRatio] = useState(() => window.devicePixelRatio || 1);
+  useEffect(() => {
+    const query = matchMedia(`(resolution: ${ratio}dppx)`);
+    const update = () => setRatio(window.devicePixelRatio || 1);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, [ratio]);
+  return ratio;
+}
+
+// The plot's height in CSS pixels; matches .week__plot.
+const PLOT_HEIGHT = 140;
+const SEGMENT_GAP = 2;
+
+/**
+ * Heights of a bar's parts in whole screen pixels. At 125% or 150% scaling a 2px gap at a fractional position is
+ * smoothed into a blur of a different width each time, so every edge is put on a screen pixel instead, and the
+ * rounding goes to the largest remainders so the bar keeps its height.
+ */
+function segmentHeights(counts: number[], barHeight: number, ratio: number) {
+  const gap = Math.max(1, Math.round(SEGMENT_GAP * ratio));
+  const minimum = Math.max(1, Math.round(2 * ratio));
+  const total = counts.reduce((sum, n) => sum + n, 0);
+  const room = Math.max(Math.round(barHeight * ratio) - gap * (counts.length - 1), minimum * counts.length);
+  const exact = counts.map((n) => (n / total) * room);
+  const pixels = exact.map((v) => Math.max(minimum, Math.floor(v)));
+  let missing = room - pixels.reduce((sum, v) => sum + v, 0);
+  for (const i of exact.map((_, i) => i).sort((a, b) => (exact[b] % 1) - (exact[a] % 1))) {
+    if (missing-- <= 0) break;
+    pixels[i]++;
+  }
+  return { gap: gap / ratio, heights: pixels.map((v) => v / ratio) };
+}
+
 /** Sentences answered on each of the last seven days, split by how they went, against the daily goal. */
 function WeekChart({ records, goal }: { records: LessonRecord[]; goal: number }) {
+  const ratio = useDevicePixelRatio();
   const now = new Date();
   const days = Array.from({ length: 7 }, (_, i) => {
     const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - i));
     return { date, count: answeredOn(records, date), verdicts: verdictsOn(records, date), today: i === 6 };
   });
+  /** Share of the day's answers, in whole percent; null on a day without answers. */
+  const percent = (verdicts: Record<Verdict, number>, verdict: Verdict) => wholeShares(verdicts)?.[verdict] ?? null;
   // Headroom above the tallest bar or the goal line, so today's value label never meets the top edge.
   const scale = Math.max(goal, ...days.map((d) => d.count)) * 1.2;
   const weekTotal = days.reduce((sum, d) => sum + d.count, 0);
@@ -111,14 +167,17 @@ function WeekChart({ records, goal }: { records: LessonRecord[]; goal: number })
       </div>
       <figure className="week">
         <div className="week__plot">
-          <div className="week__goal" style={{ bottom: `${(goal / scale) * 100}%` }}>
-            <span className="week__goal-label">цель {goal}</span>
-          </div>
+          <div className="week__goal" style={{ bottom: `${(goal / scale) * 100}%` }} />
           <ol className="week__days">
             {days.map((day) => {
               const parts = SEGMENTS.filter((s) => day.verdicts[s.verdict] > 0);
-              const breakdown = parts.map((s) => `${s.label} ${day.verdicts[s.verdict]}`).join(', ');
+              const breakdown = parts.map((s) => `${s.label} ${day.verdicts[s.verdict]} (${percent(day.verdicts, s.verdict)}%)`).join(', ');
               const label = `${longDay.format(day.date)}: ${day.count} ${sentenceWord(day.count)}${breakdown ? `: ${breakdown}` : ''}${day.count >= goal ? ', цель выполнена' : ''}`;
+              const bar = segmentHeights(
+                parts.map((s) => day.verdicts[s.verdict]),
+                (day.count / scale) * PLOT_HEIGHT,
+                ratio,
+              );
               return (
                 <li key={day.date.toISOString()} className="week__day" tabIndex={0} aria-label={label} data-today={day.today || undefined}>
                   <span className="week__tip" aria-hidden="true">
@@ -130,15 +189,16 @@ function WeekChart({ records, goal }: { records: LessonRecord[]; goal: number })
                         <span className="week__swatch" data-verdict={s.verdict} />
                         {s.label}
                         <span className="week__tip-num">{day.verdicts[s.verdict]}</span>
+                        <span className="week__tip-share">{percent(day.verdicts, s.verdict)}%</span>
                       </span>
                     ))}
                   </span>
-                  <span className="week__bar" style={{ height: `${(day.count / scale) * 100}%` }}>
-                    {parts.map((s) => (
-                      <span key={s.verdict} className="week__segment" data-verdict={s.verdict} style={{ flexGrow: day.verdicts[s.verdict] }} />
+                  <span className="week__bar" style={{ gap: bar.gap }}>
+                    {parts.map((s, i) => (
+                      <span key={s.verdict} className="week__segment" data-verdict={s.verdict} style={{ height: bar.heights[i] }} />
                     ))}
                   </span>
-                  {day.today && day.count > 0 && (
+                  {day.count > 0 && (
                     <span className="week__value" style={{ bottom: `${(day.count / scale) * 100}%` }} aria-hidden="true">
                       {day.count}
                     </span>
@@ -148,6 +208,16 @@ function WeekChart({ records, goal }: { records: LessonRecord[]; goal: number })
             })}
           </ol>
         </div>
+        <ol className="week__shares" aria-hidden="true">
+          {days.map((day) => {
+            const share = percent(day.verdicts, 'correct');
+            return (
+              <li key={day.date.toISOString()} data-today={day.today || undefined}>
+                {share === null ? '' : `${share}%`}
+              </li>
+            );
+          })}
+        </ol>
         <ol className="week__labels" aria-hidden="true">
           {days.map((day) => (
             <li key={day.date.toISOString()} data-today={day.today || undefined}>
@@ -162,6 +232,11 @@ function WeekChart({ records, goal }: { records: LessonRecord[]; goal: number })
               {s.label}
             </li>
           ))}
+          <li>
+            <span className="week__goal-swatch" />
+            цель {goal}
+          </li>
+          <li>% под столбиком — доля без ошибок</li>
         </ul>
       </figure>
     </section>

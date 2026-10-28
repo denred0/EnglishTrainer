@@ -125,7 +125,7 @@ export function Results({ sessionId, dailyGoal, sentences, attempts, repeatCount
             <h3 className="mistakes__title">Работа над ошибками</h3>
             {mistakes.some((m) => !find(m.sentence.ru)) && (
               <button type="button" className="button button--secondary" onClick={() => saveAll(mistakes.map((m) => m.sentence))}>
-                Сохранить все ошибки
+                Сохранить все предложения
               </button>
             )}
           </div>
