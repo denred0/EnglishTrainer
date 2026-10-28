@@ -1598,8 +1598,9 @@ legend.settings__heading {
   font-weight: 600;
 }
 
+/* Green pen: a run of days is something to be pleased with, and red reads like a mistake */
 .journal__streak-days {
-  color: var(--pen-red);
+  color: var(--pen-green);
   font-family: var(--font-hand);
   font-size: 38px;
   font-weight: 700;
