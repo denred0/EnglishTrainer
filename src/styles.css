@@ -31,6 +31,12 @@
   --chart-correct: var(--pen-green);
   --chart-almost: var(--pen-amber-fill);
   --chart-wrong: var(--pen-red);
+  /* One colour per statistics chart that isn't about one kind of answer: how many (blue), which weekdays (teal),
+     the run towards the next class (pink); the average grade has a neutral line with dots in the grade pens */
+  --chart-count: oklch(55% 0.14 255);
+  --chart-weekday: oklch(60% 0.115 190);
+  --chart-run: oklch(55% 0.18 345);
+  --chart-neutral: oklch(55% 0.03 265);
 
   --toast-bg: oklch(26% 0.02 265);
   --toast-text: oklch(97% 0.005 260);
@@ -77,6 +83,10 @@
   --chart-correct: oklch(53% 0.12 150);
   --chart-almost: oklch(66.5% 0.13 88);
   --chart-wrong: oklch(55% 0.19 22);
+  --chart-count: oklch(64% 0.13 255);
+  --chart-weekday: oklch(66% 0.11 190);
+  --chart-run: oklch(63% 0.16 345);
+  --chart-neutral: oklch(64% 0.03 262);
 
   --toast-bg: oklch(93% 0.008 260);
   --toast-text: oklch(21% 0.018 262);
@@ -169,6 +179,8 @@ code {
 
 /* ——— Page: one notebook sheet with a red margin rule ——— */
 
+/* Nothing may stick out sideways: on a phone anything wider than the screen, even an invisible tooltip, makes the
+   browser zoom the whole page out. clip, unlike hidden, keeps the sticky header working. */
 .page {
   position: relative;
   max-width: 880px;
@@ -177,6 +189,7 @@ code {
   padding: 0 var(--pad);
   display: flex;
   flex-direction: column;
+  overflow-x: clip;
 }
 
 .page::before {
@@ -1443,6 +1456,7 @@ legend.settings__heading {
   border-radius: 8px;
   background: var(--toast-bg);
   color: var(--toast-text);
+  max-width: calc(100vw - 2 * var(--pad));
   font-size: 12px;
   white-space: nowrap;
   pointer-events: none;
@@ -1451,8 +1465,10 @@ legend.settings__heading {
   transition-duration: 120ms;
 }
 
+/* The title may wrap on a narrow screen; the rows of figures stay on one line each */
 .week__tip-total {
   font-weight: 600;
+  white-space: normal;
 }
 
 .week__tip-row {
@@ -1589,13 +1605,69 @@ button.tabs__link {
   .week__labels [data-minor] {
     visibility: hidden;
   }
+
+  /* A tooltip is nearly as wide as a phone's chart: open every one from the chart's left edge, or the hidden ones
+     still widen the page and the phone zooms it out. --i is the column's index; columns are 100% wide plus the gap. */
+  .week__days .week__day .week__tip,
+  .share__columns .share__column .week__tip {
+    left: calc(var(--i, 0) * (-100% - var(--col-gap, 0px)) - var(--tip-shift, 0px));
+    right: auto;
+    translate: 0 0;
+  }
 }
 
-/* Share of answers: a 0–100% scale on the left, a line per kind of answer */
+/* Statistics charts have a 40px scale on the left: their tooltips start there, not at the first column */
+.stats__wide {
+  --tip-shift: 40px;
+}
+
+.week__days {
+  --col-gap: 2px;
+}
+
+/* Line charts: a scale on the left, one line over the columns with a soft fill under it */
 .share {
+  --line-tone: var(--chart-correct);
   display: grid;
   gap: 6px;
   margin: 0;
+}
+
+.share[data-tone='grade'] {
+  --line-tone: var(--chart-neutral);
+}
+
+.share[data-tone='run'] {
+  --line-tone: var(--chart-run);
+}
+
+.share__fill {
+  stop-color: var(--line-tone);
+}
+
+/* The level that matters, such as the 20 in a row that move the learner up */
+.share__threshold {
+  position: absolute;
+  inset-inline: 0;
+  border-top: 1.5px dashed var(--text-secondary);
+}
+
+.share__legend {
+  margin-inline-start: 40px;
+}
+
+/* Bar charts on the statistics page keep the line charts' left margin, so a day sits in the same column in all */
+.week.stats__wide {
+  padding-inline-start: 40px;
+}
+
+/* Bars that count: how many in blue, which weekdays in teal */
+.week__segment[data-verdict='count'] {
+  background: var(--chart-count);
+}
+
+.week__segment[data-verdict='weekday'] {
+  background: var(--chart-weekday);
 }
 
 .share__plot {
@@ -1629,7 +1701,7 @@ button.tabs__link {
   border-top: 1px solid var(--line);
 }
 
-.share__grid:last-of-type {
+.share__grid[data-base] {
   border-color: var(--line-strong);
 }
 
@@ -1647,7 +1719,7 @@ button.tabs__link {
   stroke-linejoin: round;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
-  stroke: var(--chart-correct);
+  stroke: var(--line-tone);
 }
 
 .share__dot {
@@ -1656,7 +1728,7 @@ button.tabs__link {
   height: 8px;
   border-radius: 50%;
   translate: -50% 50%;
-  background: var(--chart-correct);
+  background: var(--line-tone);
   box-shadow: 0 0 0 2px var(--paper);
   pointer-events: none;
 }

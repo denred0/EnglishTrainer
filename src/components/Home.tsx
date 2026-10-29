@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { PLOT_HEIGHT, SEGMENTS, segmentHeights, useDevicePixelRatio, wholeShares } from '../lib/chart';
 import { answeredOn, verdictsOn } from '../lib/progress';
 import { loadSession, loadSettings } from '../lib/session';
@@ -110,7 +110,7 @@ function WeekChart({ records, goal }: { records: LessonRecord[]; goal: number })
         <div className="week__plot">
           <div className="week__goal" style={{ bottom: `${(goal / scale) * 100}%` }} />
           <ol className="week__days">
-            {days.map((day) => {
+            {days.map((day, i) => {
               const parts = SEGMENTS.filter((s) => day.verdicts[s.verdict] > 0);
               const breakdown = parts.map((s) => `${s.label} ${day.verdicts[s.verdict]} (${percent(day.verdicts, s.verdict)}%)`).join(', ');
               const label = `${longDay.format(day.date)}: ${day.count} ${sentenceWord(day.count)}${breakdown ? `: ${breakdown}` : ''}${day.count >= goal ? ', цель выполнена' : ''}`;
@@ -120,7 +120,14 @@ function WeekChart({ records, goal }: { records: LessonRecord[]; goal: number })
                 ratio,
               );
               return (
-                <li key={day.date.toISOString()} className="week__day" tabIndex={0} aria-label={label} data-today={day.today || undefined}>
+                <li
+                  key={day.date.toISOString()}
+                  className="week__day"
+                  tabIndex={0}
+                  aria-label={label}
+                  data-today={day.today || undefined}
+                  style={{ '--i': i } as CSSProperties}
+                >
                   <span className="week__tip" aria-hidden="true">
                     <span className="week__tip-total">
                       {day.count} {sentenceWord(day.count)}

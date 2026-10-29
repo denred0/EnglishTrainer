@@ -1,5 +1,5 @@
 // The statistics page's numbers: the history cut into a period, split into days, weeks or months, and summed up.
-import { recordPoints } from './progress';
+import { classOf, recordPoints } from './progress';
 import { LEVELS, type Level, type LessonRecord, type Verdict } from '../types';
 
 export type Period = 'week' | 'month' | 'all';
@@ -12,6 +12,7 @@ export interface Bucket {
   verdicts: Record<Verdict, number>;
   count: number;
   lessons: number;
+  grades: number[];
 }
 
 const noVerdicts = (): Record<Verdict, number> => ({ correct: 0, almost: 0, wrong: 0 });
@@ -62,7 +63,7 @@ export function inRange(records: LessonRecord[], start: Date, end: Date) {
 export function buckets(records: LessonRecord[], start: Date, end: Date, unit: Unit): Bucket[] {
   const list: Bucket[] = [];
   for (let at = start; at < end; at = next(at, unit)) {
-    list.push({ start: at, end: next(at, unit), verdicts: noVerdicts(), count: 0, lessons: 0 });
+    list.push({ start: at, end: next(at, unit), verdicts: noVerdicts(), count: 0, lessons: 0, grades: [] });
   }
   for (const r of records) {
     const at = new Date(r.addedAt);
@@ -73,6 +74,7 @@ export function buckets(records: LessonRecord[], start: Date, end: Date, unit: U
     bucket.verdicts.wrong += r.wrong;
     bucket.count += r.answered;
     bucket.lessons++;
+    bucket.grades.push(r.grade);
   }
   return list;
 }
@@ -133,4 +135,24 @@ export function levelVerdicts(records: LessonRecord[]) {
     counts.set(answer.level, verdicts);
   }
   return LEVELS.filter((l) => counts.has(l)).map((level) => ({ level, verdicts: counts.get(level)! }));
+}
+
+/**
+ * The run towards the next class as it stood at the end of each column, and the class then. Null before the first
+ * lesson. The run carries over days without lessons, so the line stays level there.
+ */
+export function runs(records: LessonRecord[], list: Bucket[]) {
+  const first = records.length ? new Date(records.at(-1)!.addedAt) : null;
+  return list.map((b) => {
+    if (!first || first >= b.end) return null;
+    const state = classOf(records.filter((r) => new Date(r.addedAt) < b.end));
+    return { streak: state.streak, classNumber: state.number, className: state.name, top: state.next === null };
+  });
+}
+
+/** Sentences answered on each day of the week, Monday first. */
+export function weekdayCounts(records: LessonRecord[]) {
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  for (const r of records) counts[(new Date(r.addedAt).getDay() + 6) % 7] += r.answered;
+  return counts;
 }

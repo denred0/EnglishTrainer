@@ -1,4 +1,5 @@
-import { useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import { PROMOTION_STREAK } from '../lib/progress';
 import { PLOT_HEIGHT, SEGMENTS, segmentHeights, useDevicePixelRatio, wholeShares } from '../lib/chart';
 import { loadSettings } from '../lib/session';
 import {
@@ -8,7 +9,9 @@ import {
   levelVerdicts,
   periodRange,
   previousRange,
+  runs,
   summary,
+  weekdayCounts,
   type Bucket,
   type Period,
   type Summary,
@@ -126,8 +129,12 @@ export function Stats({ records }: { records: LessonRecord[] }) {
       ) : (
         <>
           <Figures now={now} before={before} compare={compare} />
-          <AnswersChart list={list} unit={unit} goal={unit === 'day' ? goal : null} />
+          <CountChart list={list} unit={unit} goal={unit === 'day' ? goal : null} />
           <ShareChart list={list} unit={unit} />
+          <AnswersChart list={list} unit={unit} />
+          <GradeChart list={list} unit={unit} />
+          <RunChart records={records} list={list} unit={unit} />
+          {period !== 'week' && <WeekdayChart records={current} />}
           <Grades records={current} />
           <Levels records={current} />
         </>
@@ -214,22 +221,19 @@ function Figures({ now, before, compare }: { now: Summary; before: Summary | nul
 }
 
 /** Answers in each day, week or month, split by how they went: the same bars as on the home page, over a longer time. */
-function AnswersChart({ list, unit, goal }: { list: Bucket[]; unit: Unit; goal: number | null }) {
+function AnswersChart({ list, unit }: { list: Bucket[]; unit: Unit }) {
   const ratio = useDevicePixelRatio();
   const columns = list.length;
-  const scale = Math.max(goal ?? 0, ...list.map((b) => b.count)) * 1.2 || 1;
-  // Numbers above every bar only while they fit side by side.
-  const values = columns <= 14;
+  const scale = Math.max(...list.map((b) => b.count)) * 1.2 || 1;
 
   return (
     <section className="home__section" aria-labelledby="answers-title">
       <div className="home__section-head">
-        <h2 className="home__title" id="answers-title">Ответы</h2>
-        <p className="home__hint">по {unit === 'day' ? 'дням' : unit === 'week' ? 'неделям' : 'месяцам'}</p>
+        <h2 className="home__title" id="answers-title">Как прошли ответы</h2>
+        <p className="home__hint">{perUnit(unit)}</p>
       </div>
       <figure className="week stats__wide" style={{ '--columns': columns } as CSSProperties}>
         <div className="week__plot">
-          {goal !== null && <div className="week__goal" style={{ bottom: `${(goal / scale) * 100}%` }} />}
           <ol className="week__days">
             {list.map((b, i) => {
               const parts = SEGMENTS.filter((s) => b.verdicts[s.verdict] > 0);
@@ -245,6 +249,7 @@ function AnswersChart({ list, unit, goal }: { list: Bucket[]; unit: Unit; goal: 
                   key={b.start.toISOString()}
                   className="week__day"
                   tabIndex={0}
+                  style={{ '--i': i } as CSSProperties}
                   data-align={tipAlign(i, columns)}
                   aria-label={`${longLabel(b, unit)}: ${b.count} ${sentenceWord(b.count)}${breakdown ? `: ${breakdown}` : ''}`}
                 >
@@ -268,11 +273,6 @@ function AnswersChart({ list, unit, goal }: { list: Bucket[]; unit: Unit; goal: 
                       ))}
                     </span>
                   )}
-                  {values && b.count > 0 && (
-                    <span className="week__value" style={{ bottom: `${(b.count / scale) * 100}%` }} aria-hidden="true">
-                      {b.count}
-                    </span>
-                  )}
                 </li>
               );
             })}
@@ -286,90 +286,131 @@ function AnswersChart({ list, unit, goal }: { list: Bucket[]; unit: Unit; goal: 
               {s.label}
             </li>
           ))}
-          {goal !== null && (
-            <li>
-              <span className="week__goal-swatch" />
-              цель {goal}
-            </li>
-          )}
         </ul>
       </figure>
     </section>
   );
 }
 
+interface Tip {
+  title: string;
+  rows: { label: string; value: string; verdict?: Verdict }[];
+}
+
+/** The tooltip over a column: a title and a row per figure, with a colour key where the figure has one. */
+function TipBox({ tip }: { tip: Tip }) {
+  return (
+    <span className="week__tip" aria-hidden="true">
+      <span className="week__tip-total">{tip.title}</span>
+      {tip.rows.map((row) => (
+        <span key={row.label} className="week__tip-row">
+          {row.verdict && <span className="week__swatch" data-verdict={row.verdict} />}
+          {row.label}
+          <span className="week__tip-num">{row.value}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+const tipText = (tip: Tip) => `${tip.title}: ${tip.rows.map((r) => `${r.label} ${r.value}`).join(', ')}`;
+
+interface LineChartProps {
+  id: string;
+  title: string;
+  hint: string;
+  list: Bucket[];
+  unit: Unit;
+  /** One per column; null where there is nothing to show. */
+  values: (number | null)[];
+  min: number;
+  max: number;
+  ticks: number[];
+  format: (value: number) => string;
+  tip: (i: number) => Tip | null;
+  /** The line's colour: green for the share without mistakes, neutral for grades, pink for the run. */
+  tone: 'correct' | 'grade' | 'run';
+  /** A colour per dot, when the value itself has one (a grade's pen); the line's own colour otherwise. */
+  dotColor?: (value: number) => string;
+  threshold?: { value: number; label: string };
+}
+
 /**
- * The share of answers without mistakes in each column: whether the right ones grow from day to day. One line only:
- * a red line for mistakes next to it would be indistinguishable from the green one for red-green colour blindness,
- * so the other shares are in the tooltip.
+ * One series over time: a 2px line through the columns that have a value, a dot on each, the newest value written
+ * next to its dot, and a tooltip per column. One series only, so its colour never has to be told apart from another.
  */
-function ShareChart({ list, unit }: { list: Bucket[]; unit: Unit }) {
+function LineChart(props: LineChartProps) {
+  const { id, title, hint, list, unit, values, min, max, ticks, format, tip, tone, dotColor, threshold } = props;
   const columns = list.length;
   const x = (i: number) => ((i + 0.5) / columns) * 100;
-  const points = list
-    .map((b, i) => ({ i, share: wholeShares(b.verdicts)?.correct ?? null }))
-    .filter((p): p is { i: number; share: number } => p.share !== null);
+  const y = (v: number) => ((v - min) / (max - min)) * 100;
+  const points = values.map((v, i) => ({ i, v })).filter((p): p is { i: number; v: number } => p.v !== null);
   const last = points.at(-1);
 
   return (
-    <section className="home__section" aria-labelledby="share-title">
+    <section className="home__section" aria-labelledby={id}>
       <div className="home__section-head">
-        <h2 className="home__title" id="share-title">Доля ответов без ошибок</h2>
-        <p className="home__hint">{unit === 'day' ? 'за день' : unit === 'week' ? 'за неделю' : 'за месяц'}</p>
+        <h2 className="home__title" id={id}>{title}</h2>
+        <p className="home__hint">{hint}</p>
       </div>
-      <figure className="share stats__wide" style={{ '--columns': columns } as CSSProperties}>
+      <figure className="share stats__wide" data-tone={tone} style={{ '--columns': columns } as CSSProperties}>
         <div className="share__plot">
           <ol className="share__axis" aria-hidden="true">
-            {[100, 50, 0].map((v) => (
-              <li key={v} style={{ bottom: `${v}%` }}>
-                {v}%
+            {ticks.map((v) => (
+              <li key={v} style={{ bottom: `${y(v)}%` }}>
+                {format(v)}
               </li>
             ))}
           </ol>
           <div className="share__area">
-            {[100, 50, 0].map((v) => (
-              <span key={v} className="share__grid" style={{ bottom: `${v}%` }} />
+            {ticks.map((v) => (
+              <span key={v} className="share__grid" data-base={v === min || undefined} style={{ bottom: `${y(v)}%` }} />
             ))}
+            {threshold && <span className="share__threshold" style={{ bottom: `${y(threshold.value)}%` }} />}
             <svg className="share__lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-              <polyline points={points.map((p) => `${x(p.i)},${100 - p.share}`).join(' ')} />
+              <defs>
+                <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">
+                  <stop className="share__fill" offset="0" stopOpacity="0.28" />
+                  <stop className="share__fill" offset="1" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {points.length > 1 && (
+                <polygon
+                  fill={`url(#${id}-fill)`}
+                  points={[
+                    `${x(points[0].i)},100`,
+                    ...points.map((p) => `${x(p.i)},${100 - y(p.v)}`),
+                    `${x(points.at(-1)!.i)},100`,
+                  ].join(' ')}
+                />
+              )}
+              <polyline points={points.map((p) => `${x(p.i)},${100 - y(p.v)}`).join(' ')} />
             </svg>
             {points.map((p) => (
-              <span key={p.i} className="share__dot" style={{ left: `${x(p.i)}%`, bottom: `${p.share}%` }} />
+              <span
+                key={p.i}
+                className="share__dot"
+                style={{ left: `${x(p.i)}%`, bottom: `${y(p.v)}%`, background: dotColor?.(p.v) }}
+              />
             ))}
             {last && (
-              <span className="share__value" style={{ left: `${x(last.i)}%`, bottom: `${last.share}%` }} aria-hidden="true">
-                {last.share}%
+              <span className="share__value" style={{ left: `${x(last.i)}%`, bottom: `${y(last.v)}%` }} aria-hidden="true">
+                {format(last.v)}
               </span>
             )}
             <ol className="share__columns">
               {list.map((b, i) => {
-                const shares = wholeShares(b.verdicts);
-                const total = totalOf(b.verdicts);
-                const text = shares
-                  ? `без ошибок ${shares.correct}%, почти ${shares.almost}%, с ошибками ${shares.wrong}%`
-                  : 'занятий не было';
+                const content = tip(i);
                 return (
                   <li
                     key={b.start.toISOString()}
                     className="share__column"
-                    tabIndex={shares ? 0 : -1}
+                    style={{ '--i': i } as CSSProperties}
+                    tabIndex={content ? 0 : -1}
                     data-align={tipAlign(i, columns)}
-                    aria-label={`${longLabel(b, unit)}: ${text}`}
+                    aria-label={content ? tipText(content) : `${longLabel(b, unit)}: нет данных`}
                   >
-                    {shares && (
-                      <span className="week__tip" aria-hidden="true">
-                        <span className="week__tip-total">
-                          {longLabel(b, unit)}: {total} {sentenceWord(total)}
-                        </span>
-                        {SEGMENTS.map((s) => (
-                          <span key={s.verdict} className="week__tip-row">
-                            <span className="week__swatch" data-verdict={s.verdict} />
-                            {s.label}
-                            <span className="week__tip-num">{shares[s.verdict]}%</span>
-                          </span>
-                        ))}
-                      </span>
-                    )}
+                    {content && <TipBox tip={content} />}
                   </li>
                 );
               })}
@@ -377,8 +418,261 @@ function ShareChart({ list, unit }: { list: Bucket[]; unit: Unit }) {
           </div>
         </div>
         <AxisLabels list={list} unit={unit} className="share__labels" />
+        {threshold && (
+          <ul className="week__legend share__legend" aria-hidden="true">
+            <li>
+              <span className="week__goal-swatch" />
+              {threshold.label}
+            </li>
+          </ul>
+        )}
       </figure>
     </section>
+  );
+}
+
+const perUnit = (unit: Unit) => (unit === 'day' ? 'за день' : unit === 'week' ? 'за неделю' : 'за месяц');
+
+/**
+ * The share of answers without mistakes in each column: whether the right ones grow from day to day. One line only:
+ * a red line for mistakes next to it would be indistinguishable from the green one for red-green colour blindness,
+ * so the other shares are in the tooltip.
+ */
+function ShareChart({ list, unit }: { list: Bucket[]; unit: Unit }) {
+  return (
+    <LineChart
+      id="share-title"
+      title="Доля ответов без ошибок"
+      hint={perUnit(unit)}
+      list={list}
+      unit={unit}
+      values={list.map((b) => wholeShares(b.verdicts)?.correct ?? null)}
+      min={0}
+      max={100}
+      ticks={[0, 50, 100]}
+      format={(v) => `${v}%`}
+      tone="correct"
+      tip={(i) => {
+        const shares = wholeShares(list[i].verdicts);
+        if (!shares) return null;
+        const total = totalOf(list[i].verdicts);
+        return {
+          title: `${longLabel(list[i], unit)}: ${total} ${sentenceWord(total)}`,
+          rows: SEGMENTS.map((s) => ({ label: s.label, value: `${shares[s.verdict]}%`, verdict: s.verdict })),
+        };
+      }}
+    />
+  );
+}
+
+// The pens the grades are written in, so a dot on the average grade line reads like the grade it's nearest to.
+const GRADE_PENS: Record<number, string> = {
+  2: 'var(--pen-red)',
+  3: 'var(--pen-amber)',
+  4: 'var(--pen-blue)',
+  5: 'var(--pen-green)',
+};
+
+/** The average grade of each column's lessons, on the 2–5 scale. */
+function GradeChart({ list, unit }: { list: Bucket[]; unit: Unit }) {
+  const averages = list.map((b) => (b.grades.length ? b.grades.reduce((sum, g) => sum + g, 0) / b.grades.length : null));
+  return (
+    <LineChart
+      id="grade-title"
+      title="Средняя оценка"
+      hint={perUnit(unit)}
+      list={list}
+      unit={unit}
+      values={averages}
+      min={2}
+      max={5}
+      ticks={[2, 3, 4, 5]}
+      format={(v) => number(v, 1)}
+      tone="grade"
+      dotColor={(v) => GRADE_PENS[Math.min(5, Math.max(2, Math.round(v)))]}
+      tip={(i) =>
+        averages[i] === null
+          ? null
+          : {
+              title: longLabel(list[i], unit),
+              rows: [
+                { label: 'средняя оценка', value: number(averages[i]!, 1) },
+                { label: 'оценки', value: list[i].grades.join(', ') },
+              ],
+            }
+      }
+    />
+  );
+}
+
+/** How the run of correct answers towards the next class went: where it grew and where a mistake reset it. */
+function RunChart({ records, list, unit }: { records: LessonRecord[]; list: Bucket[]; unit: Unit }) {
+  const states = runs(records, list);
+  return (
+    <LineChart
+      id="run-title"
+      title="Путь к следующему классу"
+      hint={`верных подряд на конец ${unit === 'day' ? 'дня' : unit === 'week' ? 'недели' : 'месяца'}`}
+      list={list}
+      unit={unit}
+      values={states.map((s) => (s && !s.top ? s.streak : null))}
+      min={0}
+      max={PROMOTION_STREAK}
+      ticks={[0, PROMOTION_STREAK / 2, PROMOTION_STREAK]}
+      format={(v) => number(v)}
+      tone="run"
+      threshold={{ value: PROMOTION_STREAK, label: `${PROMOTION_STREAK} подряд — переход в следующий класс` }}
+      tip={(i) => {
+        const state = states[i];
+        if (!state) return null;
+        const moved = i > 0 && states[i - 1] && states[i - 1]!.classNumber < state.classNumber;
+        return {
+          title: longLabel(list[i], unit),
+          rows: [
+            { label: 'верных подряд', value: state.top ? '—' : `${state.streak} из ${PROMOTION_STREAK}` },
+            { label: moved ? 'переход в' : 'класс', value: state.className },
+          ],
+        };
+      }}
+    />
+  );
+}
+
+interface BarItem {
+  key: string;
+  value: number;
+  tip: Tip;
+}
+
+/** One series of bars with its value on top: how much, not how it went. */
+function BarsChart({
+  id,
+  title,
+  hint,
+  items,
+  axis,
+  goal,
+  tone,
+}: {
+  id: string;
+  title: string;
+  hint: string;
+  items: BarItem[];
+  axis: ReactNode;
+  goal?: number | null;
+  /** Blue for how many, teal for weekdays. */
+  tone: 'count' | 'weekday';
+}) {
+  const ratio = useDevicePixelRatio();
+  const columns = items.length;
+  const scale = Math.max(goal ?? 0, ...items.map((item) => item.value)) * 1.2 || 1;
+  const most = Math.max(...items.map((item) => item.value));
+  // Every value while they fit side by side; past that, only the highest and the newest.
+  const labelled = (item: BarItem, i: number) =>
+    item.value > 0 && (columns <= 14 || item.value === most || i === columns - 1);
+
+  return (
+    <section className="home__section" aria-labelledby={id}>
+      <div className="home__section-head">
+        <h2 className="home__title" id={id}>{title}</h2>
+        <p className="home__hint">{hint}</p>
+      </div>
+      <figure className="week stats__wide" style={{ '--columns': columns } as CSSProperties}>
+        <div className="week__plot">
+          {goal != null && <div className="week__goal" style={{ bottom: `${(goal / scale) * 100}%` }} />}
+          <ol className="week__days">
+            {items.map((item, i) => (
+              <li
+                key={item.key}
+                className="week__day"
+                tabIndex={0}
+                style={{ '--i': i } as CSSProperties}
+                data-align={tipAlign(i, columns)}
+                aria-label={tipText(item.tip)}
+              >
+                <TipBox tip={item.tip} />
+                {item.value > 0 && (
+                  <span className="week__bar">
+                    <span
+                      className="week__segment"
+                      data-verdict={tone}
+                      style={{ height: segmentHeights([item.value], (item.value / scale) * PLOT_HEIGHT, ratio).heights[0] }}
+                    />
+                  </span>
+                )}
+                {labelled(item, i) && (
+                  <span className="week__value" style={{ bottom: `${(item.value / scale) * 100}%` }} aria-hidden="true">
+                    {item.value}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
+        {axis}
+        {goal != null && (
+          <ul className="week__legend" aria-hidden="true">
+            <li>
+              <span className="week__goal-swatch" />
+              цель {goal}
+            </li>
+          </ul>
+        )}
+      </figure>
+    </section>
+  );
+}
+
+/** Sentences translated in each column, against the daily goal. */
+function CountChart({ list, unit, goal }: { list: Bucket[]; unit: Unit; goal: number | null }) {
+  return (
+    <BarsChart
+      id="count-title"
+      tone="count"
+      title={`Предложений ${perUnit(unit)}`}
+      hint={`${list.filter((b) => b.count > 0).length} из ${list.length} ${unit === 'day' ? 'дней' : unit === 'week' ? 'недель' : 'месяцев'} с занятиями`}
+      goal={goal}
+      axis={<AxisLabels list={list} unit={unit} />}
+      items={list.map((b) => ({
+        key: b.start.toISOString(),
+        value: b.count,
+        tip: {
+          title: longLabel(b, unit),
+          rows: [
+            { label: 'предложений', value: String(b.count) },
+            { label: 'занятий', value: String(b.lessons) },
+          ],
+        },
+      }))}
+    />
+  );
+}
+
+const WEEKDAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+const WEEKDAY_NAMES = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
+
+/** Which days of the week the practice falls on, over the whole period. */
+function WeekdayChart({ records }: { records: LessonRecord[] }) {
+  const counts = weekdayCounts(records);
+  return (
+    <BarsChart
+      id="weekday-title"
+      tone="weekday"
+      title="По дням недели"
+      hint="сколько предложений за период пришлось на каждый день"
+      axis={
+        <ol className="week__labels" aria-hidden="true">
+          {WEEKDAYS.map((d) => (
+            <li key={d}>{d}</li>
+          ))}
+        </ol>
+      }
+      items={counts.map((value, i) => ({
+        key: WEEKDAYS[i],
+        value,
+        tip: { title: WEEKDAY_NAMES[i], rows: [{ label: 'предложений', value: String(value) }] },
+      }))}
+    />
   );
 }
 
