@@ -20,7 +20,7 @@ export function createDemoAi() {
       await pause(600);
       const pool = levels.length ? SENTENCES.filter((s) => levels.includes(s.level)) : SENTENCES;
       const source = pool.length ? pool : SENTENCES;
-      return Array.from({ length: count }, (_, i) => source[i % source.length]);
+      return { sentences: Array.from({ length: count }, (_, i) => source[i % source.length]), plan: [] };
     },
 
     async checkAnswer({ references, answer }) {

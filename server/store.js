@@ -35,6 +35,15 @@ export class JsonStore {
     return item;
   }
 
+  /** Adds several records at once, newest first, and keeps only the `limit` newest. */
+  async addAll(list, limit) {
+    const addedAt = new Date().toISOString();
+    const items = list.map((fields) => ({ id: randomUUID(), ...fields, addedAt }));
+    const keys = new Set(items.map(this.#keyOf));
+    this.#items = [...items, ...this.#items.filter((e) => !keys.has(this.#keyOf(e)))].slice(0, limit);
+    await this.#save();
+  }
+
   async restore(item) {
     this.#items = [item, ...this.#items.filter((e) => e.id !== item.id)]
       .sort((a, b) => b.addedAt.localeCompare(a.addedAt));

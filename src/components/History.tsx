@@ -4,6 +4,9 @@ import { plural } from '../lib/text';
 import { useHistory } from '../state/history';
 import type { LessonRecord } from '../types';
 import { Loading } from './Marks';
+import { Stats } from './Stats';
+
+export type HistoryTab = 'lessons' | 'stats';
 
 const timeFormat = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
 const dayFormat = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' });
@@ -19,8 +22,8 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
-/** Finished lessons with their grades, newest first. */
-export function HistoryPage() {
+/** Finished lessons with their grades, newest first, or the statistics drawn from them. */
+export function HistoryPage({ tab }: { tab: HistoryTab }) {
   const { records, error } = useHistory();
 
   const average = records && records.reduce((sum, r) => sum + r.grade, 0) / (records.length || 1);
@@ -51,6 +54,19 @@ export function HistoryPage() {
       )}
 
       {records && records.length > 0 && (
+        <nav className="tabs" aria-label="Что показать">
+          <a className="tabs__link" href="#/history" aria-current={tab === 'lessons' ? 'page' : undefined}>
+            Занятия <span className="tabs__count">{records.length}</span>
+          </a>
+          <a className="tabs__link" href="#/history/stats" aria-current={tab === 'stats' ? 'page' : undefined}>
+            Статистика
+          </a>
+        </nav>
+      )}
+
+      {records && records.length > 0 && tab === 'stats' && <Stats records={records} />}
+
+      {records && records.length > 0 && tab === 'lessons' && (
         <ol className="history__list">
           {records.map((record) => (
             <HistoryRow key={record.id} record={record} />

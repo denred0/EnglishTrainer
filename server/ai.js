@@ -25,7 +25,9 @@ Russian has no articles, so it often doesn't show whether a noun means something
 
 Sentence length by level: A1 4–7 words, A2 6–10, B1 8–14, B2 10–18, C1 12–22, C2 14–26.
 
-Mix sentence types across the set: statements, questions, negatives, requests.`;
+Each item also suggests a kind of sentence, only to keep the set varied. A natural sentence matters more: whenever the kind clashes with the grammar point, the word or the topic, or would make the Russian odd (a request with "обычно"), drop it and write what a Russian speaker would really say. Never bend Russian grammar to fit it. Vary who the sentences are about too: not always я, but also ты, вы, он, она, мы, они, family, friends, colleagues, people by name, things and places.
+
+Make every sentence fresh: no two in the set alike, and none of the textbook sentences everyone writes first ("Я люблю кофе", "У меня есть кошка", "Это моя книга", "Я иду в школу"). Take everyday vocabulary from the whole topic, not only its two most obvious words: different verbs, objects, places, times and details from sentence to sentence. Keep each sentence to one clear, everyday situation at its level's length; variety comes from the situations, not from packing in details.`;
 
 const CHECK_PROMPT = `You grade a learner's English translation of a Russian sentence. The learner is a native Russian speaker.
 
@@ -232,8 +234,13 @@ export function createAi({ model, checkEffort }) {
   }
 
   return {
-    async generateSentences({ count, levels = [], words = [], topics = [] }) {
-      const items = planItems(count, levels, words, topics);
+    /**
+     * `recent` is what the learner was given before, newest first: its topics and grammar go to the back of the
+     * queue, and its sentences of the same levels are shown to the model so it doesn't write them again.
+     * Returns the sentences and, in the same order, the plan they were written to.
+     */
+    async generateSentences({ count, levels = [], words = [], topics = [], recent = [] }) {
+      const items = planItems(count, levels, words, topics, recent);
       const batches = [];
       for (let i = 0; i < count; i += BATCH_SIZE) batches.push(items.slice(i, i + BATCH_SIZE));
 
@@ -249,14 +256,15 @@ export function createAi({ model, checkEffort }) {
                   const word = item.word && `word: ${item.word.word}${item.word.translation ? ` (${item.word.translation})` : ''}`;
                   // With a dictionary word, the topic is only sent when the learner chose it.
                   const focus = word ? (item.topicChosen ? `${word}; topic: ${item.topic}` : word) : `topic: ${item.topic}`;
-                  return `${i + 1}. ${item.level}; grammar: ${item.grammar}; ${focus}`;
+                  return `${i + 1}. ${item.level}; grammar: ${item.grammar}; ${focus}; kind: ${item.kind}`;
                 })
-                .join('\n'),
+                .join('\n') +
+              seenBefore(recent, batch),
             FAST,
           ).then(({ sentences }) => sentences.slice(0, batch.length)),
         ),
       );
-      return results.flat();
+      return { sentences: results.flat(), plan: items };
     },
 
     checkAnswer({ ru, references, answer, effort }) {
@@ -361,30 +369,74 @@ function lessonText(lesson, current) {
  * over B1 and C1 → five of each.
  * Topics the learner chose (from topics.js) take turns, in random order; a sentence on a topic is written at the
  * topic's level if its own is lower. What they didn't choose comes from the catalogue: grammar of the sentence's
- * level, a topic of that level or the one below. Nothing repeats until its list runs out.
+ * level, a topic of that level or the one below. Nothing repeats until its list runs out, and across lessons the
+ * ones used longest ago (in `recent`, newest first) come first, so the same few don't keep coming back.
  * With dictionary words, every sentence practises one of them: a random subset when there are more words
  * than sentences, each word in turn (so some repeat) when there are fewer.
+ * Each item also gets a kind of sentence, so a lesson isn't ten statements in a row.
  */
-function planItems(count, chosenLevels, words, chosenTopics) {
+function planItems(count, chosenLevels, words, chosenTopics, recent = []) {
   const pool = chosenLevels.length ? LEVELS.filter((l) => chosenLevels.includes(l)) : LEVELS;
   const levels = Array.from({ length: count }, (_, i) => pool[Math.floor((i * pool.length) / count)]);
   const grammarQueues = Object.fromEntries(
-    LEVELS.map((l) => [l, shuffle(TOPICS.filter((t) => t.kind === 'grammar' && t.level === l))]),
+    LEVELS.map((l) => [l, leastRecent(TOPICS.filter((t) => t.kind === 'grammar' && t.level === l), recent, 'grammar', (t) => t.focus)]),
   );
   const topicQueues = Object.fromEntries(
-    LEVELS.map((l) => [l, shuffle(TOPICS.filter((t) => t.kind === 'topic' && rank(t.level) <= rank(l) && rank(t.level) >= rank(l) - 1))]),
+    LEVELS.map((l) => [
+      l,
+      leastRecent(
+        TOPICS.filter((t) => t.kind === 'topic' && rank(t.level) <= rank(l) && rank(t.level) >= rank(l) - 1),
+        recent,
+        'topic',
+        (t) => t.name,
+      ),
+    ]),
   );
   const picks = shuffle(chosenTopics);
   const wordPool = shuffle(words);
+  const kinds = shuffle(KINDS);
   const items = levels.map((planned, i) => {
     const chosen = picks[i % picks.length];
     const level = chosen && rank(chosen.level) > rank(planned) ? chosen.level : planned;
     const grammar = chosen?.kind === 'grammar' ? chosen : take(grammarQueues[level]);
     const topic = chosen?.kind === 'topic' ? chosen : take(topicQueues[level]);
-    return { level, grammar: grammar.focus, topic: topic.name, topicChosen: chosen?.kind === 'topic', word: wordPool[i % wordPool.length] };
+    return {
+      level,
+      grammar: grammar.focus,
+      topic: topic.name,
+      topicChosen: chosen?.kind === 'topic',
+      word: wordPool[i % wordPool.length],
+      kind: kinds[i % kinds.length],
+    };
   });
   // Raised levels could break the easy-to-hard order.
   return items.sort((a, b) => rank(a.level) - rank(b.level));
+}
+
+// How many earlier sentences of the batch's levels the model sees: enough to steer it off the usual ones, few
+// enough to keep the request short (about 10 tokens each).
+const SEEN_LIMIT = 80;
+
+/** The learner's earlier sentences at the batch's levels, newest first, for the model to stay away from. */
+function seenBefore(recent, batch) {
+  const levels = new Set(batch.map((item) => item.level));
+  const seen = recent.filter((r) => levels.has(r.level)).slice(0, SEEN_LIMIT);
+  if (!seen.length) return '';
+  return `\n\nThe learner already had these sentences. Don't repeat any of them, and don't reuse their situations or their subject + verb + object; pick other people, actions, objects and places:\n${seen.map((r) => `- ${r.ru}`).join('\n')}`;
+}
+
+// Statements are the default the model falls back to; the other kinds only come up when asked for.
+const KINDS = ['statement', 'statement', 'statement', 'question', 'negative', 'question with a question word', 'request or advice'];
+
+/** A shuffled list with the entries used longest ago (or never) first; `recent` is newest first. */
+function leastRecent(list, recent, field, keyOf) {
+  const lastUse = new Map();
+  recent.forEach((r, i) => {
+    if (r[field] && !lastUse.has(r[field])) lastUse.set(r[field], i);
+  });
+  // Never used sorts as "longest ago"; the shuffle keeps the order random among equals.
+  const age = (item) => lastUse.get(keyOf(item)) ?? Infinity;
+  return shuffle(list).sort((a, b) => age(b) - age(a));
 }
 
 /** The next item of a queue, which goes back to the end. */

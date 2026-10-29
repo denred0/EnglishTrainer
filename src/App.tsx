@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { api } from './api';
 import { DictionaryPage, type DictionaryTab } from './components/DictionaryPage';
-import { HistoryPage } from './components/History';
+import { HistoryPage, type HistoryTab } from './components/History';
 import { HomePage } from './components/Home';
 import { GearIcon, MoonIcon, SunIcon } from './components/Marks';
 import { Practice } from './components/Practice';
@@ -10,13 +10,14 @@ import { useTheme } from './lib/theme';
 import { useDictionary } from './state/dictionary';
 import type { Status } from './types';
 
-type Route = 'home' | 'practice' | 'history' | 'settings' | DictionaryTab;
+type Route = 'home' | 'practice' | 'settings' | DictionaryTab | HistoryTab;
 
 const ROUTES: Record<string, Route> = {
   '#/practice': 'practice',
   '#/dictionary': 'words',
   '#/dictionary/sentences': 'sentences',
-  '#/history': 'history',
+  '#/history': 'lessons',
+  '#/history/stats': 'stats',
   '#/settings': 'settings',
 };
 const routeFromHash = (): Route => ROUTES[location.hash] ?? 'home';
@@ -61,7 +62,7 @@ export function App() {
             Словарь
             {entries.length > 0 && <span className="nav__count">{entries.length}</span>}
           </a>
-          <a className="nav__link" href="#/history" aria-current={route === 'history' ? 'page' : undefined}>
+          <a className="nav__link" href="#/history" aria-current={route === 'lessons' || route === 'stats' ? 'page' : undefined}>
             История
           </a>
           <button
@@ -90,8 +91,8 @@ export function App() {
           <HomePage />
         ) : route === 'practice' ? (
           <Practice status={status} />
-        ) : route === 'history' ? (
-          <HistoryPage />
+        ) : route === 'lessons' || route === 'stats' ? (
+          <HistoryPage tab={route} />
         ) : route === 'settings' ? (
           <SettingsPage status={status} />
         ) : (

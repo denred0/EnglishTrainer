@@ -19,6 +19,9 @@ const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path
 const dictionary = new JsonStore(path.join(dataDir, 'dictionary.json'), (e) => e.word.toLowerCase());
 const saved = new JsonStore(path.join(dataDir, 'sentences.json'), (s) => s.ru.trim());
 const history = new JsonStore(path.join(dataDir, 'history.json'), (h) => h.sessionId);
+// Sentences the learner was given, so new lessons don't repeat them; the oldest drop off past RECENT_LIMIT.
+const recent = new JsonStore(path.join(dataDir, 'recent.json'), (s) => s.ru.trim());
+const RECENT_LIMIT = 600;
 
 const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 // Reasoning levels the settings page offers for answer checking.
@@ -45,7 +48,12 @@ app.post('/api/sentences', async (req, res) => {
   const topics = (Array.isArray(req.body?.topics) ? req.body.topics : [])
     .map(topicById)
     .filter((t) => t && LEVELS.indexOf(t.level) <= highest);
-  res.json({ sentences: await ai.generateSentences({ count, levels, words, topics }) });
+  const { sentences, plan } = await ai.generateSentences({ count, levels, words, topics, recent: recent.list() });
+  await recent.addAll(
+    sentences.map((s, i) => ({ ru: s.ru, level: s.level, grammar: plan[i]?.grammar, topic: plan[i]?.topic })),
+    RECENT_LIMIT,
+  );
+  res.json({ sentences });
 });
 
 // What lessons can be about, for the topic picker.
@@ -223,7 +231,7 @@ app.use((err, _req, res, _next) => {
   res.status(err.httpStatus ?? 500).json({ error: err.userMessage ?? 'Что-то пошло не так на сервере. Подробности в консоли.' });
 });
 
-await Promise.all([dictionary.load(), saved.load(), history.load()]);
+await Promise.all([dictionary.load(), saved.load(), history.load(), recent.load()]);
 app.listen(port, '127.0.0.1', () => {
   const mode = demo ? 'демо-режим, без OpenAI' : `модель ${model}`;
   console.log(`API: http://localhost:${port} (${mode})`);
