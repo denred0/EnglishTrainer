@@ -13,7 +13,7 @@ When an item names a vocabulary word (with its Russian meaning), the learner is 
 Above all, en must be a faithful translation of ru: the same meaning, tense and structure. Write ru first, then translate it; never adjust en towards the grammar point without changing ru to match.
 
 For each item:
-- ru: one natural, everyday Russian sentence, the kind people actually say or write. No transliteration, brackets or hints.
+- ru: one Russian sentence that a real person would actually say in conversation or write in a message to friends, family or colleagues: common spoken phrasing, the words people use every day. No transliteration, brackets or hints.
 - en: the most natural English translation, the one a native speaker would say and a learner at that level is expected to produce.
 - alternatives: 0–3 other fully correct English translations that differ in wording (not just punctuation or contractions). If ru still allows another reading (general or specific, you singular or plural, he or she, another tense), its translation must be among them: "Официант принёс меню" → en "The waiter brought the menu.", alternatives include "A waiter brought the menu.".
 - level: the item's level.
@@ -21,13 +21,15 @@ For each item:
 
 Make the Russian clear enough that one meaning is obvious (tense, number, who does what). When Russian leaves the English tense open, add a context word (уже, вчера, сейчас, к тому времени…) so the expected tense is clear.
 
-Russian has no articles, so it often doesn't show whether a noun means something in general or a particular one the speaker has in mind ("Дети едят яйца на завтрак" fits both "Children eat…" and "The children eat…"). Whenever en has "the" or no article where the other reading is possible, make ru show which: for things in general, words like обычно, все, вообще, как правило or a general statement; for particular ones, эти, наши, мои, этот, вчерашний, в нашем классе or a context that points at them. The same goes for ты / вы when en's you could be either, and for он / она when the person matters.
+Russian has no articles, so it often doesn't show whether a noun means something in general or a particular one the speaker has in mind ("Дети едят яйца на завтрак" fits both "Children eat…" and "The children eat…"). Whenever en has "the" or no article where the other reading is possible, make ru show which: for things in general, words like обычно, все, вообще, как правило or a general statement; for particular ones, эти, наши, мои, этот, вчерашний, в нашем классе or a context that points at them. The same goes for ты / вы when en's you could be either, and for он / она when the person matters. Use such words only where people would naturally say them; never add этот / эти just to mark an article ("Который час на этих часах?" — nobody says that). If the natural sentence still allows both readings, keep it as it is and put the other reading in alternatives: either is accepted.
 
 Sentence length by level: A1 4–7 words, A2 6–10, B1 8–14, B2 10–18, C1 12–22, C2 14–26.
 
-Each item also suggests a kind of sentence, only to keep the set varied. A natural sentence matters more: whenever the kind clashes with the grammar point, the word or the topic, or would make the Russian odd (a request with "обычно"), drop it and write what a Russian speaker would really say. Never bend Russian grammar to fit it. Vary who the sentences are about too: not always я, but also ты, вы, он, она, мы, они, family, friends, colleagues, people by name, things and places.
+Each item also suggests a kind of sentence, only to keep the set varied. The grammar point (and the word, if any) must be there; the topic and the kind are only suggestions. Start from a real moment in the topic where people say something, then say it the way they would. If the grammar point, the topic and the kind together don't give such a sentence, drop the kind first, then take any situation near the topic: never glue them together into something nobody would say ("У нас химия первого мая", "Ты включил музыку, чтобы поблагодарить её за комплимент?"). A request must be one people really make ("Не забудь зонт", "Позвони, когда доедешь"). Never bend Russian grammar to fit the kind. Vary who the sentences are about too: not always я, but also ты, вы, он, она, мы, они, family, friends, colleagues, people by name, things and places.
 
-Make every sentence fresh: no two in the set alike, and none of the textbook sentences everyone writes first ("Я люблю кофе", "У меня есть кошка", "Это моя книга", "Я иду в школу"). Take everyday vocabulary from the whole topic, not only its two most obvious words: different verbs, objects, places, times and details from sentence to sentence. Keep each sentence to one clear, everyday situation at its level's length; variety comes from the situations, not from packing in details.`;
+Make every sentence fresh: no two in the set alike, and none of the textbook sentences everyone writes first ("Я люблю кофе", "У меня есть кошка", "Это моя книга", "Я иду в школу"). Take everyday vocabulary from the whole topic, not only its two most obvious words: different verbs, objects, places, times and details from sentence to sentence. Keep each sentence to one clear, everyday situation at its level's length; variety comes from the situations, not from packing in details.
+
+Before returning, read every ru aloud in your head and ask: would a Russian speaker really say these exact words to someone, in some real situation? If a sentence sounds built to show off a grammar point or a word rather than to say something ("Этот стол стоит в этой комнате", "Моя сестра читает интересную книгу каждый день"), replace it with what people actually say in that situation: a question, a reply, a plan, a complaint, a request, a bit of news ("Ты не знаешь, который час?", "Я опоздаю минут на десять", "Мы вчера весь вечер смотрели сериал").`;
 
 const CHECK_PROMPT = `You grade a learner's English translation of a Russian sentence. The learner is a native Russian speaker.
 
@@ -99,6 +101,10 @@ const STARTERS_SCHEMA = {
 
 // The tutor explains nuances, where a little reasoning helps, but the learner is waiting for the first words.
 const CHAT_EFFORT = 'low';
+
+// Without reasoning, generation glued topic, grammar point and kind into sentences nobody says ("У нас химия первого
+// мая"); a little reasoning lets the model check that each one sounds like real speech.
+const GENERATE_EFFORT = 'low';
 
 const SENTENCES_SCHEMA = {
   type: 'object',
@@ -184,8 +190,9 @@ const HINT_SCHEMA = {
 // Sentences are generated in parallel batches: one call for 20 items takes ~4× longer than four calls of 5.
 const BATCH_SIZE = 5;
 
-// Generation, word lookup and hints are easy for the model and run without reasoning: measured ~2.5× faster with the
-// same quality. Grading uses checkEffort (OPENAI_REASONING_EFFORT), or the model's default when unset; the chat, CHAT_EFFORT.
+// Word lookup and hints are easy for the model and run without reasoning: measured ~2.5× faster with the same quality.
+// Generation uses GENERATE_EFFORT; grading, checkEffort (OPENAI_REASONING_EFFORT), or the model's default when unset;
+// the chat, CHAT_EFFORT.
 const FAST = 'none';
 
 export function createAi({ model, checkEffort }) {
@@ -260,7 +267,7 @@ export function createAi({ model, checkEffort }) {
                 })
                 .join('\n') +
               seenBefore(recent, batch),
-            FAST,
+            GENERATE_EFFORT,
           ).then(({ sentences }) => sentences.slice(0, batch.length)),
         ),
       );
@@ -426,7 +433,7 @@ function seenBefore(recent, batch) {
 }
 
 // Statements are the default the model falls back to; the other kinds only come up when asked for.
-const KINDS = ['statement', 'statement', 'statement', 'question', 'negative', 'question with a question word', 'request or advice'];
+const KINDS = ['statement', 'statement', 'statement', 'question', 'question with a question word', 'request or advice'];
 
 /** A shuffled list with the entries used longest ago (or never) first; `recent` is newest first. */
 function leastRecent(list, recent, field, keyOf) {
