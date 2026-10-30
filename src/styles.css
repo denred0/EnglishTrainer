@@ -3880,42 +3880,42 @@ button.ru-word[aria-expanded='true'] {
   text-wrap: pretty;
 }
 
-/* The morphing shape; its outline is drawn by GeneratingScreen.tsx, the colour goes round the teacher's pens here */
-.morph {
-  width: min(220px, 56vw);
+/* The balls are moved by GeneratingScreen.tsx; the wave under them slides here, one wavelength per round */
+.balls {
+  width: min(400px, calc(100vw - 2 * var(--pad)));
   height: auto;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   overflow: visible;
 }
 
-.morph__shape,
-.morph__halo {
+.balls__ball--blue {
   fill: var(--pen-blue);
-  animation: morph-pens 8s linear infinite;
 }
 
-.morph__halo {
-  opacity: 0.16;
+.balls__ball--green {
+  fill: var(--pen-green);
 }
 
-/* Each pen holds for two shapes and hands over quickly, so the blends between them don't linger */
-@keyframes morph-pens {
-  0%,
-  18%,
-  100% {
-    fill: var(--pen-blue);
-  }
-  25%,
-  43% {
-    fill: var(--pen-green);
-  }
-  50%,
-  68% {
-    fill: var(--pen-amber);
-  }
-  75%,
-  93% {
-    fill: var(--pen-red);
+.balls__ball--amber {
+  fill: var(--pen-amber-fill);
+}
+
+.balls__ball--red {
+  fill: var(--pen-red);
+}
+
+.balls__wave {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.55;
+  animation: balls-wave 900ms linear infinite;
+}
+
+@keyframes balls-wave {
+  to {
+    translate: 20px 0;
   }
 }
 
