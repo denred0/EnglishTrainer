@@ -13,8 +13,9 @@ When an item names a vocabulary word (with its Russian meaning), the learner is 
 Above all, en must be a faithful translation of ru: the same meaning, tense and structure. Write ru first, then translate it; never adjust en towards the grammar point without changing ru to match.
 
 For each item:
+- situation: first, in a few English words, the concrete moment: who says it to whom, where and why ("a mum texting her son who is late", "a passenger asking the driver"). Pick a moment where the item's grammar point comes up by itself when people talk, inside the topic or near it.
 - ru: one Russian sentence that a real person would actually say in conversation or write in a message to friends, family or colleagues: common spoken phrasing, the words people use every day. No transliteration, brackets or hints.
-- en: the most natural English translation, the one a native speaker would say and a learner at that level is expected to produce.
+- en: the most natural English translation, the one a native speaker would say in that moment and a learner at that level is expected to produce. Translate every word and detail of ru, nothing more (метро → the metro / the subway), with articles by English rules. Never push the grammar point into en when a native speaker would say it another way ("had he better", "How, I was wondering", "moreover" in a chat): change ru so that the natural translation uses it, or let it go.
 - alternatives: 0–3 other fully correct English translations that differ in wording (not just punctuation or contractions). If ru still allows another reading (general or specific, you singular or plural, he or she, another tense), its translation must be among them: "Официант принёс меню" → en "The waiter brought the menu.", alternatives include "A waiter brought the menu.".
 - level: the item's level.
 - grammar: 1–3 grammar points that translating this sentence practises, as short standard names in English Title Case ("Present Perfect", "Past Simple", "First Conditional", "Passive Voice", "Comparatives", "Articles", "Modal Verbs"), the item's grammar point first. For a word area, its short name ("Numbers", "Phrasal Verbs", "Idioms"). Name what en actually uses; skip trivial things every sentence has.
@@ -103,8 +104,9 @@ const STARTERS_SCHEMA = {
 const CHAT_EFFORT = 'low';
 
 // Without reasoning, generation glued topic, grammar point and kind into sentences nobody says ("У нас химия первого
-// мая"); a little reasoning lets the model check that each one sounds like real speech.
-const GENERATE_EFFORT = 'low';
+// мая"). Measured with scripts/eval-sentences.js on 120 sentences A1–B2: odd or with a faulty reference, 22–27 at
+// low, 12–15 at medium. Medium takes ~30 s a batch instead of ~10, which is fine once per lesson.
+const GENERATE_EFFORT = 'medium';
 
 const SENTENCES_SCHEMA = {
   type: 'object',
@@ -116,8 +118,9 @@ const SENTENCES_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['ru', 'en', 'alternatives', 'level', 'grammar'],
+        required: ['situation', 'ru', 'en', 'alternatives', 'level', 'grammar'],
         properties: {
+          situation: { type: 'string' },
           ru: { type: 'string' },
           en: { type: 'string' },
           alternatives: { type: 'array', items: { type: 'string' } },
@@ -191,11 +194,11 @@ const HINT_SCHEMA = {
 const BATCH_SIZE = 5;
 
 // Word lookup and hints are easy for the model and run without reasoning: measured ~2.5× faster with the same quality.
-// Generation uses GENERATE_EFFORT; grading, checkEffort (OPENAI_REASONING_EFFORT), or the model's default when unset;
-// the chat, CHAT_EFFORT.
+// Generation uses GENERATE_EFFORT unless createAi gets another (scripts/eval-sentences.js compares them); grading,
+// checkEffort (OPENAI_REASONING_EFFORT), or the model's default when unset; the chat, CHAT_EFFORT.
 const FAST = 'none';
 
-export function createAi({ model, checkEffort }) {
+export function createAi({ model, checkEffort, generateEffort = GENERATE_EFFORT }) {
   let client;
   let fastSupported = true;
 
@@ -267,8 +270,8 @@ export function createAi({ model, checkEffort }) {
                 })
                 .join('\n') +
               seenBefore(recent, batch),
-            GENERATE_EFFORT,
-          ).then(({ sentences }) => sentences.slice(0, batch.length)),
+            generateEffort,
+          ).then(({ sentences }) => sentences.slice(0, batch.length).map(({ situation, ...sentence }) => sentence)),
         ),
       );
       return { sentences: results.flat(), plan: items };

@@ -9,7 +9,8 @@
     "dev:web": "vite",
     "demo": "concurrently -k -n api,web -c blue,green \"node scripts/dev-server.js --demo\" \"npm:dev:web\"",
     "build": "tsc -b && vite build",
-    "start": "node --env-file-if-exists=.env server/index.js"
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "eval": "node --env-file-if-exists=.env scripts/eval-sentences.js"
   },
   "dependencies": {
     "express": "^5.3.0",

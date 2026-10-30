@@ -202,7 +202,7 @@ export function Setup({ settings, status, loading, error, onChange, onStart }: P
           )}
         </button>
         <p className="setup__wait" role="status">
-          {loading ? 'Обычно это занимает несколько секунд.' : ''}
+          {loading ? 'Модель подбирает естественные фразы, это занимает до минуты.' : ''}
         </p>
       </div>
     </form>
