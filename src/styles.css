@@ -3835,9 +3835,9 @@ button.ru-word[aria-expanded='true'] {
   scale: 0.96;
 }
 
-/* ——— Chopping screen: shown while a lesson's sentences are generated ——— */
+/* ——— Generating screen: shown while a lesson's sentences are made ——— */
 
-.chop {
+.generating {
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -3860,7 +3860,7 @@ button.ru-word[aria-expanded='true'] {
   overflow: hidden;
 }
 
-.chop__line {
+.generating__line {
   min-height: 2.4em;
   max-width: 22ch;
   color: var(--ink);
@@ -3872,7 +3872,7 @@ button.ru-word[aria-expanded='true'] {
   animation: rise 300ms var(--ease);
 }
 
-.chop__note {
+.generating__note {
   max-width: 38ch;
   margin-bottom: 8px;
   color: var(--text-secondary);
@@ -3880,12 +3880,43 @@ button.ru-word[aria-expanded='true'] {
   text-wrap: pretty;
 }
 
-.lumberjack {
-  display: block;
-  width: min(560px, calc(100vw - 2 * var(--pad)));
+/* The morphing shape; its outline is drawn by GeneratingScreen.tsx, the colour goes round the teacher's pens here */
+.morph {
+  width: min(220px, 56vw);
   height: auto;
-  max-height: 52dvh;
-  object-fit: contain;
+  margin-bottom: 16px;
+  overflow: visible;
+}
+
+.morph__shape,
+.morph__halo {
+  fill: var(--pen-blue);
+  animation: morph-pens 8s linear infinite;
+}
+
+.morph__halo {
+  opacity: 0.16;
+}
+
+/* Each pen holds for two shapes and hands over quickly, so the blends between them don't linger */
+@keyframes morph-pens {
+  0%,
+  18%,
+  100% {
+    fill: var(--pen-blue);
+  }
+  25%,
+  43% {
+    fill: var(--pen-green);
+  }
+  50%,
+  68% {
+    fill: var(--pen-amber);
+  }
+  75%,
+  93% {
+    fill: var(--pen-red);
+  }
 }
 
 /* ——— Motion ——— */

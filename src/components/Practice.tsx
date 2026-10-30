@@ -12,7 +12,7 @@ import { useSaved } from '../state/saved';
 import { useToast } from '../state/toast';
 import type { Sentence, Settings, Status } from '../types';
 import { Exercise } from './Exercise';
-import { ChoppingScreen } from './Lumberjack';
+import { GeneratingScreen } from './GeneratingScreen';
 import { LessonChat } from './LessonChat';
 import { ChatIcon } from './Marks';
 import { Progress } from './Progress';
@@ -46,7 +46,7 @@ export function Practice({ status }: { status: Status | null }) {
   const [error, setError] = useState<string | null>(null);
   // Set synchronously, unlike `loading`, so a second click before the re-render can't start another request.
   const starting = useRef(false);
-  // The sentence request in flight, so the chopping screen can cancel it.
+  // The sentence request in flight, so the generating screen can cancel it.
   const generation = useRef<AbortController | null>(null);
   const { groups: topicGroups } = useTopics();
   const [chatOpen, setChatOpen] = useState(false);
@@ -135,12 +135,12 @@ export function Practice({ status }: { status: Status | null }) {
   }
 
   const cancelGeneration = useCallback(() => generation.current?.abort(), []);
-  const chopping = loading && <ChoppingScreen onCancel={cancelGeneration} />;
+  const generating = loading && <GeneratingScreen onCancel={cancelGeneration} />;
 
   if (!session) {
     return (
       <>
-        {chopping}
+        {generating}
         <Setup
           settings={settings}
           status={status}
@@ -163,7 +163,7 @@ export function Practice({ status }: { status: Status | null }) {
 
   return (
     <div className="session">
-      {chopping}
+      {generating}
       <div className="session__bar">
         <p className="session__summary">
           {total} {plural(total, ['предложение', 'предложения', 'предложений'])}, {levelText}
