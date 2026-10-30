@@ -110,9 +110,6 @@ export function Results({ sessionId, dailyGoal, sentences, attempts, repeatCount
               Изменить настройки
             </button>
           </div>
-          <p className="results__status" role="status">
-            {loading ? 'Модель подбирает естественные фразы, это занимает до минуты.' : ''}
-          </p>
           {error && <p className="form-error" role="alert">{error}</p>}
         </div>
       </div>

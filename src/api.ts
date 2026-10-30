@@ -34,8 +34,10 @@ async function get<T>(url: string, attempts = 4): Promise<T> {
 export const api = {
   status: () => get<Status>('/api/status'),
 
-  sentences: (count: number, levels: Level[], words: PracticeWord[], topics: string[]) =>
-    request<{ sentences: Sentence[] }>('/api/sentences', post({ count, levels, words, topics })).then((r) => r.sentences),
+  sentences: (count: number, levels: Level[], words: PracticeWord[], topics: string[], signal?: AbortSignal) =>
+    request<{ sentences: Sentence[] }>('/api/sentences', { ...post({ count, levels, words, topics }), signal }).then(
+      (r) => r.sentences,
+    ),
 
   topics: () => get<{ groups: TopicGroup[] }>('/api/topics').then((r) => r.groups),
 

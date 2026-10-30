@@ -201,9 +201,6 @@ export function Setup({ settings, status, loading, error, onChange, onStart }: P
             'Начать'
           )}
         </button>
-        <p className="setup__wait" role="status">
-          {loading ? 'Модель подбирает естественные фразы, это занимает до минуты.' : ''}
-        </p>
       </div>
     </form>
   );

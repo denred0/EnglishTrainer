@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { lessonStats, levelsText } from '../lib/lesson';
 import { classOf, lessonAnswers, lessonPoints, openLevels } from '../lib/progress';
@@ -12,6 +12,7 @@ import { useSaved } from '../state/saved';
 import { useToast } from '../state/toast';
 import type { Sentence, Settings, Status } from '../types';
 import { Exercise } from './Exercise';
+import { ChoppingScreen } from './Lumberjack';
 import { LessonChat } from './LessonChat';
 import { ChatIcon } from './Marks';
 import { Progress } from './Progress';
@@ -45,6 +46,8 @@ export function Practice({ status }: { status: Status | null }) {
   const [error, setError] = useState<string | null>(null);
   // Set synchronously, unlike `loading`, so a second click before the re-render can't start another request.
   const starting = useRef(false);
+  // The sentence request in flight, so the chopping screen can cancel it.
+  const generation = useRef<AbortController | null>(null);
   const { groups: topicGroups } = useTopics();
   const [chatOpen, setChatOpen] = useState(false);
   const chatToggleRef = useRef<HTMLButtonElement>(null);
@@ -99,12 +102,14 @@ export function Practice({ status }: { status: Status | null }) {
     const levels = lessonLevels(next.levels, openLevels(classOf(records ?? [])));
     // The server leaves out topics above the lesson's levels too; here they're dropped for the summary line.
     const topics = topicGroups ? chosenTopics(next.topics, topicGroups, levels).fit : [];
+    const controller = new AbortController();
+    generation.current = controller;
     setLoading(true);
     setError(null);
     try {
       // Without the catalogue (it failed to load) the ids go as they are, and the server sorts them out.
       const topicIds = topicGroups ? topics.map((t) => t.id) : next.topics;
-      const fresh = freshCount > 0 ? await api.sentences(freshCount, levels, words, topicIds) : [];
+      const fresh = freshCount > 0 ? await api.sentences(freshCount, levels, words, topicIds, controller.signal) : [];
       const sentences = mixIn(fresh, fromSaved);
       if (sentences.length === 0) throw new Error('Модель не вернула ни одного предложения. Попробуй ещё раз.');
       setSession({
@@ -121,23 +126,30 @@ export function Practice({ status }: { status: Status | null }) {
       });
       window.scrollTo({ top: 0 });
     } catch (err) {
-      setError((err as Error).message);
+      if (!controller.signal.aborted) setError((err as Error).message);
     } finally {
+      generation.current = null;
       starting.current = false;
       setLoading(false);
     }
   }
 
+  const cancelGeneration = useCallback(() => generation.current?.abort(), []);
+  const chopping = loading && <ChoppingScreen onCancel={cancelGeneration} />;
+
   if (!session) {
     return (
-      <Setup
-        settings={settings}
-        status={status}
-        loading={loading}
-        error={error}
-        onChange={setSettings}
-        onStart={() => start(settings)}
-      />
+      <>
+        {chopping}
+        <Setup
+          settings={settings}
+          status={status}
+          loading={loading}
+          error={error}
+          onChange={setSettings}
+          onStart={() => start(settings)}
+        />
+      </>
     );
   }
 
@@ -151,6 +163,7 @@ export function Practice({ status }: { status: Status | null }) {
 
   return (
     <div className="session">
+      {chopping}
       <div className="session__bar">
         <p className="session__summary">
           {total} {plural(total, ['предложение', 'предложения', 'предложений'])}, {levelText}

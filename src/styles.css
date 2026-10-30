@@ -1001,11 +1001,6 @@ button.nav__link {
   gap: 12px 20px;
 }
 
-.setup__wait {
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
 .notice {
   padding: 14px 16px;
   border: 1px solid var(--line);
@@ -2057,11 +2052,6 @@ button.tabs__link {
 
 .session__actions .button {
   padding: 0 12px;
-}
-
-.results__status {
-  color: var(--text-secondary);
-  font-size: 14px;
 }
 
 .sheet {
@@ -3843,6 +3833,59 @@ button.ru-word[aria-expanded='true'] {
 
 .toast__action:active {
   scale: 0.96;
+}
+
+/* ——— Chopping screen: shown while a lesson's sentences are generated ——— */
+
+.chop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: var(--pad);
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: var(--cell) var(--cell);
+  overflow: hidden;
+  text-align: center;
+  animation: fade 200ms var(--ease);
+}
+
+.is-locked {
+  overflow: hidden;
+}
+
+.chop__line {
+  min-height: 2.4em;
+  max-width: 22ch;
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: clamp(28px, 7vw, 36px);
+  font-weight: 700;
+  line-height: 1.2;
+  text-wrap: balance;
+  animation: rise 300ms var(--ease);
+}
+
+.chop__note {
+  max-width: 38ch;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-wrap: pretty;
+}
+
+.lumberjack {
+  display: block;
+  width: min(560px, calc(100vw - 2 * var(--pad)));
+  height: auto;
+  max-height: 52dvh;
+  object-fit: contain;
 }
 
 /* ——— Motion ——— */
